@@ -6,6 +6,9 @@ When a motion-sensor senses motion, the dog will press its head forward.
 When somebody puts their hand over the dog's head, the dog's tail will begin to wag.
 When they take their hand away, the dog will reset and wait a few seconds before
 looking for people to ask for attention again.
+
+Toy dog electronic components include 2 servos, a small breadboard-mountable 
+PIR sensor, a photocell, and an Arduino Uno.
 */
 
 #include <Servo.h>  // includes servo library to drive servo motors
@@ -39,11 +42,10 @@ int noseReading = LOW;  // start with no motion
 bool photoCovered = false; // a boolean variable to track when photocell is covered
 bool wasPet = false;       // will track if the photocell was covered after being uncovered
 bool sniff = true;         // bool to track if dog should check motion or not
-bool asking = false;       // bool to track if head is in forward position
 bool relaxed = true;       // bool to track if dog is in relaxed position
 
-int timeUncovered = 1500;   // tracks moment that the photocell is uncovered
-int timeSincePet = 0;       // used to compare difference between moment photocell
+int timeUncovered = 0;     // tracks moment that the photocell is uncovered
+int timeSincePet = 0;      // used to compare difference between moment photocell
   // is uncovered and time program has been running overall to find how long photocell has been uncovered
 
 
@@ -54,24 +56,26 @@ void relax() {
   Custom function to put dog in resting position and stay there before it can 
   continue checking if there is motion nearby and reacting to it.
   */
-  Serial.println("relaxing");
   // if not already in relaxed position, then move:
   if (!relaxed) {
+    Serial.println("relaxing");
     neckServo.write(20);     // start moving neck servo backwards at a little less than full speed
     delay(forwardPosTime);
     neckServo.write(90);    // stop neck servo movement
     Serial.println("neck servo stopped");
-    asking = false;   // says dog's head is not in the asking position
 
     // tailServo.write(tailRestPos); // put tail in resting position
     wasPet = false;               
-    sniff = true;         // let dog check for motion again
-    Serial.println("sniffing");
+    sniff = false;         // let dog check for motion again
+    Serial.println("not sniffing");
     relaxed = true;
+  } else {
+    Serial.println ("already relaxed");
   }
 
   delay(2500);      // wait in relaxed position for 2.5 seconds
-  
+  sniff = true; // ### should this be here??
+  Serial.println("sniffing");
 }
 
 void wag() {
@@ -102,6 +106,8 @@ void checkPhotocell() {
       wasPet = true;  // dog was pet if the photocell has been uncovered after being covered
 
       // record moment it was uncovered here??
+      timeUncovered = millis(); // millis gives number of milliseconds since program started
+        // so timeUncovered keeps track of moment it was uncovered
     }
     photoCovered = false;
   }
@@ -118,7 +124,8 @@ void setup() {
 
   // attach digital pins to servo objects
   neckServo.attach(9);  // attached to digital pin 9
-  tailServo.attach(8);  // must be in setup() or loop() because it's dynamic code (calls a function)
+  tailServo.attach(8);  // attach lines must be in setup() or loop() because 
+    // they're dynamic code (calls a function)
 
   // initialize servo speeds to be 0
   neckServo.write(90);  
@@ -145,13 +152,12 @@ void loop() {
       Serial.println("motion detected");
 
       // put head in forward position if it is not already
-      if (!asking) {
+      if (relaxed) {
         neckServo.write(160);   // spin neck servo forward at slightly less than full speed
         delay(forwardPosTime);  // wait for head to be put in forward position
         neckServo.write(90);    // stop neck servo spin
         Serial.println("neck servo stopped");
         Serial.println("pets please!");
-        asking = true;
         relaxed = false;
       }
       
@@ -194,26 +200,17 @@ void loop() {
 
           // by using photoCovered as conditional, only does this the first time it's uncovered
           if (photoCovered && wasPet) {
-            timeUncovered = millis(); // millis gives number of milliseconds since program started
+            // timeUncovered = millis(); // millis gives number of milliseconds since program started
             // so timeUncovered keeps track of moment it was uncovered
           }
           photoCovered = false;
           Serial.println("uncovered");
         
-          sniff = false;  // prevent dog from checking for motion
-          Serial.println("not sniffing");
+          // sniff = false;  // prevent dog from checking for motion
+          // Serial.println("not sniffing");
 
 
           // create counter or create cases
-          // timeSincePet = millis() - timeUncovered;  // gives elapsed time between 
-          //   // time this line was run and moment dog was uncovered
-          // Serial.print("time since pet: ");
-          // Serial.println(timeSincePet);
-
-          // if (timeSincePet > 1500 && wasPet) {
-          //   relax();
-          // }
-
         }
       }
     }
