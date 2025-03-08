@@ -40,7 +40,7 @@ bool photoCovered = false; // a boolean variable to track when photocell is cove
 bool wasPet = false;       // will track if the photocell was covered after being uncovered
 bool sniff = true;         // bool to track if dog should check motion or not
 bool asking = false;       // bool to track if head is in forward position
-bool relaxed = false;       // bool to track if dog is in relaxed position
+bool relaxed = true;       // bool to track if dog is in relaxed position
 
 int timeUncovered = 1500;   // tracks moment that the photocell is uncovered
 int timeSincePet = 0;       // used to compare difference between moment photocell
@@ -98,8 +98,10 @@ void checkPhotocell() {
   photoVal = analogRead(photoInPin);  // read photocell
   // Serial.println(photoVal);  // print ADC reading to serial monitor
   if (photoVal < photoThresh) {
-    if (photoVal) {
+    if (photoCovered) {
       wasPet = true;  // dog was pet if the photocell has been uncovered after being covered
+
+      // record moment it was uncovered here??
     }
     photoCovered = false;
   }
