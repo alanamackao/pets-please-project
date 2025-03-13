@@ -30,7 +30,7 @@ int photoThresh = 350;  // threshold for the photocell reading
 
 // servo variables
 Servo neckServo;          // creates a servo object to control a servo
-int forwardPosTime = 400; // duration in milliseconds to move neck servo to put head forward
+int forwardPosTime = 100; // duration in milliseconds to move neck servo to put head forward
 Servo tailServo;          // second servo object
 int wagTime = 100;        // duration in milliseconds to move tail servo to wag
 
@@ -39,14 +39,17 @@ int nosePin = 12;       // digital input pin for the PIR sensor, acts as the dog
 int noseReading = LOW;  // start with no motion
 
 // tracking variables
-bool photoCovered = false; // a boolean variable to track when photocell is covered
-bool wasPet = false;       // will track if the photocell was covered after being uncovered
-bool sniff = true;         // bool to track if dog should check motion or not
-bool relaxed = true;       // bool to track if dog is in relaxed position
+bool photoCovered = false;  // a boolean variable to track when photocell is covered
+// bool wasPet = false;        // will track if the photocell was covered after being uncovered
+bool sniff = true;          // bool to track if dog should check motion or not
+bool relaxed = true;        // bool to track if dog is in relaxed position
+bool keepWagging = false;   // bool to track if dog should keep wagging when photocell is only uncovered for a moment
+bool unstick = true;    // bool to help exit an infinite loop
 
 int timeUncovered = 0;     // tracks moment that the photocell is uncovered
 int timeSincePet = 0;      // used to compare difference between moment photocell
   // is uncovered and time program has been running overall to find how long photocell has been uncovered
+int waitForAttnCounter = 0;
 
 
 // custom functions -----------------------------------------------------------
@@ -56,24 +59,27 @@ void relax() {
   Custom function to put dog in resting position and stay there before it can 
   continue checking if there is motion nearby and reacting to it.
   */
+  // wasPet = false;               
+
   // if not already in relaxed position, then move:
   if (!relaxed) {
     Serial.println("relaxing");
-    neckServo.write(20);     // start moving neck servo backwards at a little less than full speed
-    delay(forwardPosTime);
+    neckServo.write(100);     // start moving neck servo backwards at a little less than full speed
+    delay(forwardPosTime + (forwardPosTime/2)); // added a correction time value because it would drift forward
     neckServo.write(90);    // stop neck servo movement
     Serial.println("neck servo stopped");
 
     // tailServo.write(tailRestPos); // put tail in resting position
-    wasPet = false;               
+    // wasPet = false;               
     sniff = false;         // let dog check for motion again
     Serial.println("not sniffing");
     relaxed = true;
+    delay(2500);      // wait in relaxed position for 2.5 seconds
   } else {
     Serial.println ("already relaxed");
   }
 
-  delay(2500);      // wait in relaxed position for 2.5 seconds
+  // delay(2500);      // wait in relaxed position for 2.5 seconds
   sniff = true; // ### should this be here??
   Serial.println("sniffing");
 }
@@ -103,16 +109,20 @@ void checkPhotocell() {
   // Serial.println(photoVal);  // print ADC reading to serial monitor
   if (photoVal < photoThresh) {
     if (photoCovered) {
-      wasPet = true;  // dog was pet if the photocell has been uncovered after being covered
+      // wasPet = true;  // dog was pet if the photocell has been uncovered after being covered
 
       // record moment it was uncovered here??
       timeUncovered = millis(); // millis gives number of milliseconds since program started
         // so timeUncovered keeps track of moment it was uncovered
     }
     photoCovered = false;
-
     timeSincePet = millis() - timeUncovered;  // gives elapsed time between 
       // time this line was run and moment dog was uncovered
+    if (timeSincePet < 3000) {  // if it has been less than 3 seconds since the photocell was covered
+      keepWagging = true;
+    } else {
+      keepWagging = false;
+    }
   }
   else {
     photoCovered = true;
@@ -143,6 +153,8 @@ void setup() {
 
 void loop() {  
 
+  unstick = true; // reset unstick bool so whole loop will run by default
+
   // check if motion nearby ---------------------------------------------------
 
   if (sniff) {
@@ -156,7 +168,7 @@ void loop() {
 
       // put head in forward position if it is not already
       if (relaxed) {
-        neckServo.write(160);   // spin neck servo forward at slightly less than full speed
+        neckServo.write(80);   // spin neck servo backward slowly
         delay(forwardPosTime);  // wait for head to be put in forward position
         neckServo.write(90);    // stop neck servo spin
         Serial.println("neck servo stopped");
@@ -167,91 +179,39 @@ void loop() {
       // check if being pet -----------------------------------------------------
 
       checkPhotocell();
+      Serial.println("first photo check");
 
       // loop checking until being pet ----------------------------------------
       
       // loops as long as the dog is not being pet (photocell is uncovered)
-      while (!photoCovered) {
-        // timeSincePet = millis() - timeUncovered;  // gives elapsed time between 
-          // time this line was run and moment dog was uncovered
-        // Serial.print("time since pet: ");
-        // Serial.println(timeSincePet);
-
-        if (timeSincePet > 4000) {  // if it has been more than 4 seconds since being pet
-          relax();
-        }
-
-        checkPhotocell();
-
-        // // Serial.println("uncovered");
-        // photoVal = analogRead(photoInPin);  // read photocell
-        // // Serial.println(photoVal);  // print ADC reading to serial monitor
-
-        // // compares ADC reading to threshold set at top to see if photocell is covered
-        // if (photoVal > photoThresh) {
-        //   // Serial.println("covered");
-        //   wasPet = true;  // says dog was pet if photocell is covered after being uncovered
-        //   photoCovered = true;
+      while (!photoCovered && unstick) {
+        // if (timeSincePet > 4000) {  // if it has been more than 4 seconds since being pet
+        //   relax();
         // }
+        Serial.println("waiting to be pet");
+        checkPhotocell();
+        waitForAttnCounter += 1;
+        if (waitForAttnCounter > 600) {
+          Serial.println("took too long to pet");
+          relax();
+          unstick = false;
+        } 
       }
+      waitForAttnCounter = 0;
       // loop is left when dog is being pet
 
 
       // loop as long as dog is being pet -------------------------------------
 
-      // loops as long as the dog is being pet (photocell is covered)
-      while (photoCovered /*could add another OR conditional here for if it's being pet*/) {
+      // loops as long as the dog is being pet (photocell is covered or has only been uncovered for a short while)
+      while ((photoCovered || keepWagging) && unstick) {
+        Serial.println("being pet");
         wag();
         checkPhotocell();
-
-        // photoVal = analogRead(photoInPin);  // read photocell
-        // // Serial.println(photoVal);  // print ADC reading to serial monitor
-
-        // // if the photocell is uncovered
-        // if (photoVal < photoThresh) {
-
-        //   // by using photoCovered as conditional, only does this the first time it's uncovered
-        //   if (photoCovered && wasPet) {
-        //     // timeUncovered = millis(); // millis gives number of milliseconds since program started
-        //     // so timeUncovered keeps track of moment it was uncovered
-        //   }
-        //   photoCovered = false;
-        //   Serial.println("uncovered");
-        
-          // sniff = false;  // prevent dog from checking for motion
-          // Serial.println("not sniffing");
-
-
-          // create counter or create cases
-        }
       }
 
+      relax();
 
-
-      // // loops as long as the dog is being pet (photocell is covered)
-      // while (photoCovered /*could add another conditional here for if it's being pet*/) {
-      //   wag();
-      //   photoVal = analogRead(photoInPin);  // read photocell
-      //   // Serial.println(photoVal);  // print ADC reading to serial monitor
-
-      //   // if the photocell is uncovered
-      //   if (photoVal < photoThresh) {
-
-      //     // by using photoCovered as conditional, only does this the first time it's uncovered
-      //     if (photoCovered && wasPet) {
-      //       // timeUncovered = millis(); // millis gives number of milliseconds since program started
-      //       // so timeUncovered keeps track of moment it was uncovered
-      //     }
-      //     photoCovered = false;
-      //     Serial.println("uncovered");
-        
-      //     // sniff = false;  // prevent dog from checking for motion
-      //     // Serial.println("not sniffing");
-
-
-      //     // create counter or create cases
-      //   }
-      // }
     }
   } 
 }
