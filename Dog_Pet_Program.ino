@@ -58,20 +58,18 @@ void relax() {
   /*
   Custom function to put dog in resting position and stay there before it can 
   continue checking if there is motion nearby and reacting to it.
-  */
-  // wasPet = false;               
+  */            
 
   // if not already in relaxed position, then move:
   if (!relaxed) {
     Serial.println("relaxing");
     neckServo.write(100);     // start moving neck servo backwards at a little less than full speed
-    delay(forwardPosTime + (forwardPosTime/2)); // added a correction time value because it would drift forward
-    neckServo.write(90);    // stop neck servo movement
+    delay(forwardPosTime);    // + (forwardPosTime/2)); // added a correction time value because it would drift forward
+    neckServo.write(90);      // stop neck servo movement
     Serial.println("neck servo stopped");
 
-    // tailServo.write(tailRestPos); // put tail in resting position
-    // wasPet = false;               
-    sniff = false;         // let dog check for motion again
+           
+    sniff = false;     // let dog check for motion again
     Serial.println("not sniffing");
     relaxed = true;
     delay(2500);      // wait in relaxed position for 2.5 seconds
@@ -79,8 +77,7 @@ void relax() {
     Serial.println ("already relaxed");
   }
 
-  // delay(2500);      // wait in relaxed position for 2.5 seconds
-  sniff = true; // ### should this be here??
+  sniff = true; 
   Serial.println("sniffing");
 }
 
@@ -104,14 +101,41 @@ void wag() {
   Serial.println("tail servo stopped");
 }
 
+void wagPosition() {
+  /*
+  Custom function to make sure dog's tail wags a minimum of 4 times even if 
+  photocell is covered and uncovered again immediately.
+  
+  Adjusted for the position assigned servo
+  */
+  Serial.println("tail servo wagging");
+  for (int i = 0; i <= 3; i++) {
+    // this for loop says the starting condition, i = 0, happens once.
+      // As long as i is < = 3, the loop runs. At the end of the loop, i++
+    tailServo.write(110);   // starts tail servo forwards at full speed
+    delay(100);             // wait 100 ms for tail to reach up position
+    tailServo.write(90);    // go back to central position
+    delay(100);             // wait for tail to reach down position
+    tailServo.write(70);    // starts tail servo forwards at full speed
+    delay(100);             // waits to get back to default position
+  }
+  tailServo.write(90);      // put tail back in relaxed position
+  Serial.println("tail servo stopped");
+}
+
+
 void checkPhotocell() {
+  /*
+  Custom function to check the photocell. If the photocell is uncovered when
+  it is checked, this function compares how long it has been since the
+  photocell was first uncovered to the current moment. This will ensure that
+  Pablo keeps wagging his tail if the photocell has only been uncovered for
+  a moment while he is still being pet. 
+  */
   photoVal = analogRead(photoInPin);  // read photocell
-  // Serial.println(photoVal);  // print ADC reading to serial monitor
   if (photoVal < photoThresh) {
     if (photoCovered) {
-      // wasPet = true;  // dog was pet if the photocell has been uncovered after being covered
-
-      // record moment it was uncovered here??
+      // record moment it was uncovered here
       timeUncovered = millis(); // millis gives number of milliseconds since program started
         // so timeUncovered keeps track of moment it was uncovered
     }
@@ -119,13 +143,13 @@ void checkPhotocell() {
     timeSincePet = millis() - timeUncovered;  // gives elapsed time between 
       // time this line was run and moment dog was uncovered
     if (timeSincePet < 3000) {  // if it has been less than 3 seconds since the photocell was covered
-      keepWagging = true;
+      keepWagging = true;       // then keep wagging, person probably hasn't left yet
     } else {
-      keepWagging = false;
+      keepWagging = false;      // if it's been longer, person is likely gone
     }
   }
   else {
-    photoCovered = true;
+    photoCovered = true;        // loop will continue
   }
 }
 
@@ -142,7 +166,7 @@ void setup() {
 
   // initialize servo speeds to be 0
   neckServo.write(90);  
-  tailServo.write(90);  
+  tailServo.write(90);  // with position servo, sets position to 90 degrees
 
   // assign PIR pin mode
   pinMode(nosePin, INPUT);  // motion sensor pin as input, digital pin so will give HIGH or LOW only
@@ -185,9 +209,6 @@ void loop() {
       
       // loops as long as the dog is not being pet (photocell is uncovered)
       while (!photoCovered && unstick) {
-        // if (timeSincePet > 4000) {  // if it has been more than 4 seconds since being pet
-        //   relax();
-        // }
         Serial.println("waiting to be pet");
         checkPhotocell();
         waitForAttnCounter += 1;
@@ -211,7 +232,6 @@ void loop() {
       }
 
       relax();
-
     }
   } 
 }
